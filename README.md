@@ -1,2 +1,4 @@
 # gnn
-run test_mst_model.py
+run
+```bash
+test_mst_model.py

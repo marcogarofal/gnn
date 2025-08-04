@@ -244,17 +244,6 @@ def continuous_random_test(predictor, num_tests=100, show_plots=False):
     best_graph = None
     worst_graph = None
 
-    # CONTATORI VITTORIE
-    victories = {
-        'kruskal_wins': 0,
-        'gnn_wins': 0,
-        'ties': 0,
-        'gnn_failures': 0
-    }
-
-    # Casi speciali dove GNN trova soluzione migliore
-    gnn_better_cases = []
-
     for i in range(num_tests):
         print(f"\nTest {i+1}/{num_tests}")
         print("-" * 40)
@@ -262,31 +251,6 @@ def continuous_random_test(predictor, num_tests=100, show_plots=False):
         try:
             result, G, mst_pred, mst_true = test_single_random_graph(predictor)
             results.append(result)
-
-            # CONTA VITTORIE
-            if not result['success']:
-                victories['gnn_failures'] += 1
-            else:
-                # Confronta i pesi con tolleranza per errori di arrotondamento
-                weight_diff = result['gnn_weight'] - result['kruskal_weight']
-                tolerance = 0.0001  # Tolleranza per float
-
-                if abs(weight_diff) < tolerance:
-                    victories['ties'] += 1
-                    print("  🤝 PAREGGIO! Stessi pesi")
-                elif weight_diff < 0:
-                    victories['gnn_wins'] += 1
-                    print(f"  🏆 GNN VINCE! Risparmio: {-weight_diff:.2f}")
-                    # Salva caso interessante
-                    gnn_better_cases.append({
-                        'result': result,
-                        'graph': G,
-                        'mst_pred': mst_pred,
-                        'mst_true': mst_true,
-                        'savings': -weight_diff
-                    })
-                else:
-                    victories['kruskal_wins'] += 1
 
             # Aggiorna migliore e peggiore
             if result['success']:
@@ -328,13 +292,6 @@ def continuous_random_test(predictor, num_tests=100, show_plots=False):
                     print(f"Peso medio GNN: {avg_gnn_weight:.2f}")
                     print(f"Gap medio: {avg_gap*100:.2f}%")
 
-                # Mostra conteggio vittorie parziale
-                print(f"\nCONTEGGIO VITTORIE:")
-                print(f"  Kruskal: {victories['kruskal_wins']}")
-                print(f"  GNN: {victories['gnn_wins']}")
-                print(f"  Pareggi: {victories['ties']}")
-                print(f"  Fallimenti GNN: {victories['gnn_failures']}")
-
         except Exception as e:
             print(f"  Errore nel test: {e}")
             continue
@@ -347,50 +304,8 @@ def continuous_random_test(predictor, num_tests=100, show_plots=False):
     successful = [r for r in results if r['success']]
     print(f"\nTest completati con successo: {len(successful)}/{len(results)}")
 
-    # RISULTATI VITTORIE
-    print("\n" + "="*60)
-    print("🏁 CONTEGGIO FINALE VITTORIE 🏁")
-    print("="*60)
-    total_tests = len(results)
-    total_successful = victories['kruskal_wins'] + victories['gnn_wins'] + victories['ties']
-
-    print(f"\nSu {total_tests} test totali:")
-    print(f"  ✓ Test riusciti: {total_successful}")
-    print(f"  ✗ Fallimenti GNN: {victories['gnn_failures']}")
-
-    if total_successful > 0:
-        print(f"\nSu {total_successful} test riusciti:")
-        print(f"  🥇 KRUSKAL vince: {victories['kruskal_wins']} ({victories['kruskal_wins']/total_successful*100:.1f}%)")
-        print(f"  🥈 GNN vince: {victories['gnn_wins']} ({victories['gnn_wins']/total_successful*100:.1f}%)")
-        print(f"  🤝 Pareggi: {victories['ties']} ({victories['ties']/total_successful*100:.1f}%)")
-
-    # Mostra casi dove GNN ha vinto
-    if gnn_better_cases:
-        print(f"\n⭐ CASI INTERESSANTI: GNN ha trovato soluzioni migliori in {len(gnn_better_cases)} casi!")
-        print("Dettagli dei primi 3 casi:")
-        for i, case in enumerate(gnn_better_cases[:3]):
-            print(f"\n  Caso {i+1}:")
-            print(f"    Tipo grafo: {case['result']['graph_type']}")
-            print(f"    Nodi: {case['result']['n_nodes']}")
-            print(f"    Peso Kruskal: {case['result']['kruskal_weight']:.2f}")
-            print(f"    Peso GNN: {case['result']['gnn_weight']:.2f}")
-            print(f"    Risparmio: {case['savings']:.2f}")
-
-        # Visualizza il caso più eclatante
-        if gnn_better_cases:
-            best_gnn_case = max(gnn_better_cases, key=lambda x: x['savings'])
-            print(f"\n🌟 MIGLIOR CASO GNN (risparmio massimo: {best_gnn_case['savings']:.2f}):")
-            visualize_with_weights(
-                best_gnn_case['graph'],
-                best_gnn_case['mst_pred'],
-                best_gnn_case['mst_true']
-            )
-
     if successful:
         # Statistiche globali
-        print("\n" + "="*60)
-        print("STATISTICHE DETTAGLIATE")
-        print("="*60)
         print("\nSTATISTICHE GLOBALI:")
         print(f"  Peso medio Kruskal: {np.mean([r['kruskal_weight'] for r in successful]):.2f}")
         print(f"  Peso medio GNN: {np.mean([r['gnn_weight'] for r in successful]):.2f}")
@@ -401,36 +316,42 @@ def continuous_random_test(predictor, num_tests=100, show_plots=False):
         print(f"  Accuratezza media: {np.mean([r['edge_accuracy'] for r in successful])*100:.2f}%")
 
         # Mostra migliore e peggiore risultato
-        if best_result and best_result['quality_gap'] >= 0:
-            print(f"\nMIGLIOR RISULTATO GNN (gap minimo positivo):")
+        if best_result:
+            print(f"\nMIGLIOR RISULTATO:")
             print(f"  Tipo: {best_result['graph_type']}, {best_result['n_nodes']} nodi")
             print(f"  Peso Kruskal: {best_result['kruskal_weight']:.2f}")
             print(f"  Peso GNN: {best_result['gnn_weight']:.2f}")
             print(f"  Gap: {best_result['quality_gap']*100:.2f}%")
 
+            # Visualizza il migliore
+            if best_graph:
+                print("\n  Visualizzazione del miglior risultato...")
+                visualize_with_weights(*best_graph)
+
         if worst_result:
-            print(f"\nPEGGIOR RISULTATO GNN:")
+            print(f"\nPEGGIOR RISULTATO:")
             print(f"  Tipo: {worst_result['graph_type']}, {worst_result['n_nodes']} nodi")
             print(f"  Peso Kruskal: {worst_result['kruskal_weight']:.2f}")
             print(f"  Peso GNN: {worst_result['gnn_weight']:.2f}")
             print(f"  Gap: {worst_result['quality_gap']*100:.2f}%")
 
-        # Per tipo di grafo con conteggio vittorie
-        print("\nVITTORIE PER TIPO DI GRAFO:")
+            # Visualizza il peggiore
+            if worst_graph:
+                print("\n  Visualizzazione del peggior risultato...")
+                visualize_with_weights(*worst_graph)
+
+        # Per tipo di grafo
+        print("\nPER TIPO DI GRAFO:")
         for gtype, type_results in stats_by_type.items():
             type_successful = [r for r in type_results if r['success']]
             if type_successful:
-                type_kruskal_wins = sum(1 for r in type_successful if r['quality_gap'] > 0.0001)
-                type_gnn_wins = sum(1 for r in type_successful if r['quality_gap'] < -0.0001)
-                type_ties = len(type_successful) - type_kruskal_wins - type_gnn_wins
-
                 print(f"\n{gtype} ({len(type_successful)} test):")
-                print(f"  Kruskal vince: {type_kruskal_wins}")
-                print(f"  GNN vince: {type_gnn_wins}")
-                print(f"  Pareggi: {type_ties}")
+                print(f"  Peso medio Kruskal: {np.mean([r['kruskal_weight'] for r in type_successful]):.2f}")
+                print(f"  Peso medio GNN: {np.mean([r['gnn_weight'] for r in type_successful]):.2f}")
                 print(f"  Gap medio: {np.mean([r['quality_gap'] for r in type_successful])*100:.2f}%")
+                print(f"  Accuratezza: {np.mean([r['edge_accuracy'] for r in type_successful])*100:.2f}%")
 
-    return results, victories, gnn_better_cases
+    return results
 
 
 def visualize_random_test_results(results):
@@ -528,16 +449,16 @@ def main():
         choice = input("\nScelta: ")
 
         if choice == '1':
-            results, victories, gnn_better_cases = continuous_random_test(predictor, 10)
+            results = continuous_random_test(predictor, 10)
             visualize_random_test_results(results)
 
         elif choice == '2':
-            results, victories, gnn_better_cases = continuous_random_test(predictor, 100)
+            results = continuous_random_test(predictor, 100)
             visualize_random_test_results(results)
 
         elif choice == '3':
             n = int(input("Numero di test: "))
-            results, victories, gnn_better_cases = continuous_random_test(predictor, n)
+            results = continuous_random_test(predictor, n)
             visualize_random_test_results(results)
 
         elif choice == '4':
@@ -545,37 +466,18 @@ def main():
             print("="*60)
             i = 0
             results = []
-            victories = {'kruskal_wins': 0, 'gnn_wins': 0, 'ties': 0, 'gnn_failures': 0}
             try:
                 while True:
                     i += 1
                     print(f"\nTest {i}")
-                    result, G, mst_pred, mst_true = test_single_random_graph(predictor)
+                    result, _, _, _ = test_single_random_graph(predictor)
                     results.append(result)
-
-                    # Aggiorna conteggio vittorie
-                    if not result['success']:
-                        victories['gnn_failures'] += 1
-                    else:
-                        weight_diff = result['gnn_weight'] - result['kruskal_weight']
-                        if abs(weight_diff) < 0.0001:
-                            victories['ties'] += 1
-                        elif weight_diff < 0:
-                            victories['gnn_wins'] += 1
-                        else:
-                            victories['kruskal_wins'] += 1
 
                     if i % 50 == 0:
                         print(f"\n--- Completati {i} test ---")
-                        print(f"Kruskal: {victories['kruskal_wins']}, GNN: {victories['gnn_wins']}, Pareggi: {victories['ties']}")
 
             except KeyboardInterrupt:
                 print(f"\n\nInterrotto dopo {i} test")
-                print(f"\nRISULTATI FINALI:")
-                print(f"  Kruskal vince: {victories['kruskal_wins']}")
-                print(f"  GNN vince: {victories['gnn_wins']}")
-                print(f"  Pareggi: {victories['ties']}")
-                print(f"  Fallimenti: {victories['gnn_failures']}")
                 if results:
                     visualize_random_test_results(results)
 

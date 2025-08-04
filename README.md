@@ -5,7 +5,7 @@
 python mst_dataset_generator.py
 ```
 
-## Run the direct predictor:
+## Train the model:
 ```bash
 python mst_direct_predictor.py
 ```

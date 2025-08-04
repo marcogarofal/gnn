@@ -21,6 +21,225 @@ def load_model():
     return MSTPredictor(model)
 
 
+def generate_custom_graph(graph_type='erdos_renyi', n_nodes=30, **kwargs):
+    """Genera un grafo personalizzato con parametri specifici"""
+
+    print(f"\nGenerando {graph_type} con {n_nodes} nodi...")
+
+    try:
+        if graph_type == 'erdos_renyi':
+            p = kwargs.get('p', random.uniform(0.05, 0.3))
+            G = nx.erdos_renyi_graph(n_nodes, p)
+            print(f"  Probabilità edges: {p:.2f}")
+
+        elif graph_type == 'barabasi_albert':
+            m = kwargs.get('m', random.randint(1, min(5, n_nodes-1)))
+            G = nx.barabasi_albert_graph(n_nodes, m)
+            print(f"  Edges per nuovo nodo: {m}")
+
+        elif graph_type == 'watts_strogatz':
+            k = kwargs.get('k', random.randint(4, min(10, n_nodes-1)))
+            p = kwargs.get('p', random.uniform(0.1, 0.5))
+            G = nx.watts_strogatz_graph(n_nodes, k, p)
+            print(f"  k={k}, probabilità rewiring={p:.2f}")
+
+        elif graph_type == 'random_geometric':
+            radius = kwargs.get('radius', random.uniform(0.1, 0.4))
+            G = nx.random_geometric_graph(n_nodes, radius)
+            print(f"  Raggio: {radius:.2f}")
+
+        elif graph_type == 'powerlaw_tree':
+            gamma = kwargs.get('gamma', 3)
+            G = nx.powerlaw_tree(n_nodes, gamma)
+            print(f"  Gamma: {gamma}")
+
+        elif graph_type == 'grid':
+            rows = kwargs.get('rows', int(np.sqrt(n_nodes)))
+            cols = kwargs.get('cols', int(np.sqrt(n_nodes)))
+            G = nx.grid_2d_graph(rows, cols)
+            G = nx.convert_node_labels_to_integers(G)
+            print(f"  Griglia: {rows}x{cols}")
+
+        elif graph_type == 'complete':
+            G = nx.complete_graph(n_nodes)
+            print(f"  Grafo completo")
+
+        elif graph_type == 'cycle':
+            G = nx.cycle_graph(n_nodes)
+            print(f"  Grafo ciclico")
+
+        elif graph_type == 'star':
+            G = nx.star_graph(n_nodes - 1)  # n_nodes include il centro
+            print(f"  Grafo a stella")
+
+        elif graph_type == 'wheel':
+            G = nx.wheel_graph(n_nodes)
+            print(f"  Grafo a ruota")
+
+        elif graph_type == 'ladder':
+            G = nx.ladder_graph(n_nodes // 2)
+            print(f"  Grafo a scala")
+
+        elif graph_type == 'circular_ladder':
+            G = nx.circular_ladder_graph(n_nodes // 2)
+            print(f"  Scala circolare")
+
+        elif graph_type == 'hypercube':
+            n = int(np.log2(n_nodes))
+            G = nx.hypercube_graph(n)
+            print(f"  Ipercubo di dimensione {n}")
+
+        elif graph_type == 'tree':
+            r = kwargs.get('r', 2)  # branching factor
+            h = kwargs.get('h', int(np.log(n_nodes) / np.log(r)))  # height
+            G = nx.balanced_tree(r, h)
+            print(f"  Albero bilanciato: r={r}, h={h}")
+
+        else:
+            print(f"  Tipo sconosciuto '{graph_type}', uso erdos_renyi")
+            G = nx.erdos_renyi_graph(n_nodes, 0.2)
+
+    except Exception as e:
+        print(f"  Errore nella generazione: {e}")
+        print(f"  Fallback a erdos_renyi")
+        G = nx.erdos_renyi_graph(n_nodes, 0.2)
+
+    # Assicura che sia connesso
+    if not nx.is_connected(G):
+        # Prendi la componente più grande
+        largest_cc = max(nx.connected_components(G), key=len)
+        G = G.subgraph(largest_cc).copy()
+        G = nx.convert_node_labels_to_integers(G)
+        print(f"  Ridotto a componente connessa: {G.number_of_nodes()} nodi")
+
+    # Aggiungi pesi
+    weight_dist = kwargs.get('weight_dist', random.choice(['uniform', 'exponential', 'normal', 'power_law']))
+
+    for u, v in G.edges():
+        if weight_dist == 'uniform':
+            low = kwargs.get('weight_min', 0.1)
+            high = kwargs.get('weight_max', 20.0)
+            weight = random.uniform(low, high)
+        elif weight_dist == 'exponential':
+            scale = kwargs.get('weight_scale', 3.0)
+            weight = np.random.exponential(scale) + 0.1
+        elif weight_dist == 'normal':
+            mean = kwargs.get('weight_mean', 5.0)
+            std = kwargs.get('weight_std', 2.0)
+            weight = max(0.1, np.random.normal(mean, std))
+        else:  # power_law
+            alpha = kwargs.get('weight_alpha', 2.0)
+            weight = np.random.pareto(alpha) + 0.1
+
+        G[u][v]['weight'] = min(weight, 100.0)  # Cap massimo
+
+    print(f"  Distribuzione pesi: {weight_dist}")
+    print(f"  Grafo finale: {G.number_of_nodes()} nodi, {G.number_of_edges()} edges")
+
+    return G, graph_type, weight_dist
+
+
+def interactive_custom_test(predictor):
+    """Test interattivo con parametri personalizzati"""
+
+    print("\n" + "="*60)
+    print("TEST PERSONALIZZATO")
+    print("="*60)
+
+    # Mostra tipi disponibili
+    graph_types = [
+        'erdos_renyi', 'barabasi_albert', 'watts_strogatz',
+        'random_geometric', 'powerlaw_tree', 'grid',
+        'complete', 'cycle', 'star', 'wheel',
+        'ladder', 'circular_ladder', 'hypercube', 'tree'
+    ]
+
+    print("\nTipi di grafo disponibili:")
+    for i, gtype in enumerate(graph_types, 1):
+        print(f"{i:2d}. {gtype}")
+
+    # Scegli tipo
+    try:
+        choice = int(input("\nScegli il tipo (numero): "))
+        graph_type = graph_types[choice - 1]
+    except:
+        graph_type = 'erdos_renyi'
+        print(f"Scelta non valida, uso {graph_type}")
+
+    # Numero di nodi
+    try:
+        n_nodes = int(input("Numero di nodi (default 30): ") or "30")
+    except:
+        n_nodes = 30
+
+    # Parametri specifici per tipo
+    kwargs = {}
+
+    if graph_type == 'erdos_renyi':
+        try:
+            p = float(input("Probabilità edges (0-1, default random): ") or "-1")
+            if 0 <= p <= 1:
+                kwargs['p'] = p
+        except:
+            pass
+
+    elif graph_type == 'barabasi_albert':
+        try:
+            m = int(input(f"Edges per nuovo nodo (1-{min(5, n_nodes-1)}, default random): ") or "-1")
+            if 1 <= m < n_nodes:
+                kwargs['m'] = m
+        except:
+            pass
+
+    elif graph_type == 'watts_strogatz':
+        try:
+            k = int(input("k (vicini iniziali, default random): ") or "-1")
+            if k > 0:
+                kwargs['k'] = k
+            p = float(input("Probabilità rewiring (0-1, default random): ") or "-1")
+            if 0 <= p <= 1:
+                kwargs['p'] = p
+        except:
+            pass
+
+    elif graph_type == 'random_geometric':
+        try:
+            radius = float(input("Raggio (0-1, default random): ") or "-1")
+            if 0 < radius <= 1:
+                kwargs['radius'] = radius
+        except:
+            pass
+
+    # Distribuzione pesi
+    print("\nDistribuzione pesi:")
+    print("1. uniform")
+    print("2. exponential")
+    print("3. normal")
+    print("4. power_law")
+
+    try:
+        weight_choice = int(input("Scegli (1-4, default random): ") or "0")
+        weight_dists = ['uniform', 'exponential', 'normal', 'power_law']
+        if 1 <= weight_choice <= 4:
+            kwargs['weight_dist'] = weight_dists[weight_choice - 1]
+    except:
+        pass
+
+    # Genera e testa
+    G, gtype, wdist = generate_custom_graph(graph_type, n_nodes, **kwargs)
+
+    # Test
+    print("\n" + "-"*40)
+    result, G, mst_pred, mst_true = test_single_random_graph(predictor, verbose=True)
+
+    # Visualizza
+    visualize = input("\nVuoi visualizzare il risultato? (s/n): ")
+    if visualize.lower() == 's':
+        visualize_with_weights(G, mst_pred, mst_true)
+
+    return result
+
+
 def generate_random_graph():
     """Genera un grafo completamente casuale ogni volta"""
 
@@ -32,67 +251,8 @@ def generate_random_graph():
                    'random_geometric', 'powerlaw_tree', 'grid', 'complete']
     graph_type = random.choice(graph_types)
 
-    print(f"\nGenerando {graph_type} con {n_nodes} nodi...")
-
-    try:
-        if graph_type == 'erdos_renyi':
-            p = random.uniform(0.05, 0.3)
-            G = nx.erdos_renyi_graph(n_nodes, p)
-
-        elif graph_type == 'barabasi_albert':
-            m = random.randint(1, min(5, n_nodes-1))
-            G = nx.barabasi_albert_graph(n_nodes, m)
-
-        elif graph_type == 'watts_strogatz':
-            k = random.randint(4, min(10, n_nodes-1))
-            p = random.uniform(0.1, 0.5)
-            G = nx.watts_strogatz_graph(n_nodes, k, p)
-
-        elif graph_type == 'random_geometric':
-            radius = random.uniform(0.1, 0.4)
-            G = nx.random_geometric_graph(n_nodes, radius)
-
-        elif graph_type == 'powerlaw_tree':
-            G = nx.powerlaw_tree(n_nodes)
-
-        elif graph_type == 'grid':
-            side = int(np.sqrt(n_nodes))
-            G = nx.grid_2d_graph(side, side)
-            G = nx.convert_node_labels_to_integers(G)
-
-        else:  # complete
-            if n_nodes > 50:  # Limita per grafi completi
-                n_nodes = random.randint(10, 50)
-            G = nx.complete_graph(n_nodes)
-
-    except:
-        # Fallback se qualcosa va storto
-        G = nx.erdos_renyi_graph(n_nodes, 0.2)
-
-    # Assicura che sia connesso
-    if not nx.is_connected(G):
-        # Prendi la componente più grande
-        largest_cc = max(nx.connected_components(G), key=len)
-        G = G.subgraph(largest_cc).copy()
-        G = nx.convert_node_labels_to_integers(G)
-
-    # Aggiungi pesi casuali con distribuzione casuale
-    weight_distributions = ['uniform', 'exponential', 'normal', 'power_law']
-    weight_dist = random.choice(weight_distributions)
-
-    for u, v in G.edges():
-        if weight_dist == 'uniform':
-            weight = random.uniform(0.1, 20.0)
-        elif weight_dist == 'exponential':
-            weight = np.random.exponential(3.0) + 0.1
-        elif weight_dist == 'normal':
-            weight = max(0.1, np.random.normal(5.0, 2.0))
-        else:  # power_law
-            weight = np.random.pareto(2.0) + 0.1
-
-        G[u][v]['weight'] = min(weight, 100.0)  # Cap massimo
-
-    return G, graph_type, weight_dist
+    # Genera usando la funzione custom con parametri random
+    return generate_custom_graph(graph_type, n_nodes)
 
 
 def test_single_random_graph(predictor, verbose=True):
@@ -523,7 +683,9 @@ def main():
         print("2. Test esteso (100 grafi casuali)")
         print("3. Test personalizzato (scegli numero)")
         print("4. Test infinito (premi Ctrl+C per fermare)")
-        print("5. Esci")
+        print("5. Test con parametri custom")
+        print("6. Test su tipo specifico")
+        print("7. Esci")
 
         choice = input("\nScelta: ")
 
@@ -580,6 +742,78 @@ def main():
                     visualize_random_test_results(results)
 
         elif choice == '5':
+            # Test con parametri personalizzati
+            interactive_custom_test(predictor)
+
+        elif choice == '6':
+            # Test su tipo specifico
+            print("\nTest su tipo specifico di grafo")
+
+            # Mostra tipi
+            graph_types = ['erdos_renyi', 'barabasi_albert', 'watts_strogatz',
+                          'random_geometric', 'grid', 'complete', 'tree']
+            for i, gt in enumerate(graph_types, 1):
+                print(f"{i}. {gt}")
+
+            try:
+                type_choice = int(input("\nScegli tipo (1-7): "))
+                graph_type = graph_types[type_choice - 1]
+            except:
+                graph_type = 'erdos_renyi'
+
+            # Parametri per il test
+            try:
+                n_tests = int(input("Numero di test (default 20): ") or "20")
+                n_nodes = int(input("Numero di nodi fisso (default varia 10-100): ") or "0")
+            except:
+                n_tests = 20
+                n_nodes = 0
+
+            print(f"\nTest su {n_tests} grafi {graph_type}")
+            results = []
+            victories = {'kruskal_wins': 0, 'gnn_wins': 0, 'ties': 0, 'gnn_failures': 0}
+
+            for i in range(n_tests):
+                print(f"\nTest {i+1}/{n_tests}")
+
+                # Usa numero di nodi fisso o random
+                nodes = n_nodes if n_nodes > 0 else random.randint(10, 100)
+
+                # Genera grafo del tipo scelto
+                G, _, wdist = generate_custom_graph(graph_type, nodes)
+
+                # Test
+                result, G, mst_pred, mst_true = test_single_random_graph(predictor, verbose=True)
+                results.append(result)
+
+                # Conteggio vittorie
+                if not result['success']:
+                    victories['gnn_failures'] += 1
+                else:
+                    weight_diff = result['gnn_weight'] - result['kruskal_weight']
+                    if abs(weight_diff) < 0.0001:
+                        victories['ties'] += 1
+                    elif weight_diff < 0:
+                        victories['gnn_wins'] += 1
+                    else:
+                        victories['kruskal_wins'] += 1
+
+            # Risultati finali
+            print(f"\n{'='*60}")
+            print(f"RISULTATI PER {graph_type.upper()}")
+            print(f"{'='*60}")
+            print(f"Kruskal vince: {victories['kruskal_wins']}")
+            print(f"GNN vince: {victories['gnn_wins']}")
+            print(f"Pareggi: {victories['ties']}")
+            print(f"Fallimenti: {victories['gnn_failures']}")
+
+            if results:
+                successful = [r for r in results if r['success']]
+                if successful:
+                    print(f"\nGap medio: {np.mean([r['quality_gap'] for r in successful])*100:.2f}%")
+                    print(f"Accuratezza media: {np.mean([r['edge_accuracy'] for r in successful])*100:.2f}%")
+
+        elif choice == '7':
             break
         else:
             print("Scelta non valida")

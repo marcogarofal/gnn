@@ -14,3 +14,11 @@ python mst_direct_predictor.py
 ```bash
 python test_mst_model.py
 ```
+
+
+## To explore the MST dataset:
+```bash
+python dataset_info.py
+```
+
+

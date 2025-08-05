@@ -1,0 +1,62 @@
+TEST SINGOLO GRAFO CASUALE
+Timestamp: 2025-08-05 09:23:46
+
+PARAMETRI GRAFO:
+  Tipo: complete
+  Nodi: 20
+  Edges: 190
+  Densità: 1.000
+  Peso minimo: 1
+  Peso massimo: 100
+  Peso medio: 51.2
+
+RISULTATI:
+  Peso Kruskal: 132
+  Peso GNN: 132
+  Gap: 0.00%
+  Accuratezza edges: 94.7%
+  Speedup: 0.0x
+  È connesso: True
+  È albero valido: True
+
+EDGES MST KRUSKAL:
+  0-3: peso 4
+  0-17: peso 5
+  0-18: peso 4
+  1-6: peso 4
+  1-18: peso 1
+  2-13: peso 12
+  3-4: peso 6
+  3-8: peso 16
+  3-10: peso 11
+  4-5: peso 6
+  5-13: peso 10
+  6-19: peso 8
+  7-9: peso 5
+  7-13: peso 9
+  10-12: peso 12
+  10-14: peso 7
+  11-14: peso 9
+  12-15: peso 2
+  15-16: peso 1
+
+EDGES MST GNN:
+  0-3: peso 4
+  0-17: peso 5
+  0-18: peso 4
+  1-6: peso 4
+  1-18: peso 1
+  2-13: peso 12
+  3-4: peso 6
+  3-8: peso 16
+  4-5: peso 6
+  4-10: peso 11
+  5-13: peso 10
+  6-19: peso 8
+  7-9: peso 5
+  7-13: peso 9
+  10-12: peso 12
+  10-14: peso 7
+  11-14: peso 9
+  12-15: peso 2
+  15-16: peso 1

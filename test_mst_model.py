@@ -10,15 +10,23 @@ import random
 
 def load_model():
     """Carica il modello addestrato"""
-    checkpoint = torch.load('final_direct_mst_model.pth', map_location='cpu')
-    model = MSTDirectPredictor(
-        node_feature_dim=checkpoint['node_feature_dim'],
-        edge_feature_dim=checkpoint['edge_feature_dim'],
-        hidden_dim=checkpoint['hidden_dim'],
-        num_layers=checkpoint['num_layers']
-    )
-    model.load_state_dict(checkpoint['model_state_dict'])
-    return MSTPredictor(model)
+    try:
+        checkpoint = torch.load('final_direct_mst_model.pth', map_location='cpu')
+        model = MSTDirectPredictor(
+            node_feature_dim=checkpoint['node_feature_dim'],
+            edge_feature_dim=checkpoint['edge_feature_dim'],
+            hidden_dim=checkpoint['hidden_dim'],
+            num_layers=checkpoint['num_layers']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        return MSTPredictor(model)
+    except FileNotFoundError:
+        print("❌ File 'final_direct_mst_model.pth' non trovato!")
+        print("   Assicurati di aver prima addestrato il modello eseguendo mst_direct_predictor.py")
+        raise
+    except Exception as e:
+        print(f"❌ Errore nel caricamento del modello: {e}")
+        raise
 
 
 def generate_custom_graph(graph_type='erdos_renyi', n_nodes=30, **kwargs):
@@ -317,8 +325,8 @@ def test_single_random_graph(predictor, verbose=True):
 def visualize_with_weights(G, mst_pred, mst_true, save=True):
     """Visualizza confronto con i pesi ben evidenziati"""
 
-    pos = nx.spring_layout(G, k=2, iterations=50)
-    plt.figure(figsize=(18, 6))
+    pos = nx.spring_layout(G, k=3, iterations=100)  # Più spazio tra nodi
+    plt.figure(figsize=(20, 8))
 
     # Calcola pesi
     if mst_pred:
@@ -327,23 +335,87 @@ def visualize_with_weights(G, mst_pred, mst_true, save=True):
         pred_weight = float('inf')
     true_weight = sum(G[u][v]['weight'] for u, v in mst_true.edges())
 
+    # Funzione per calcolare posizione e rotazione ottimale dei pesi
+    def get_edge_label_pos_and_angle(pos, u, v):
+        """Calcola posizione e angolo per il peso dell'edge"""
+        x1, y1 = pos[u]
+        x2, y2 = pos[v]
+        
+        # Punto medio dell'edge (esattamente sull'arco)
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        
+        # Calcola angolo dell'edge per ruotare il testo
+        dx = x2 - x1
+        dy = y2 - y1
+        
+        if dx == 0:  # Edge verticale
+            angle = 90 if dy > 0 else -90
+        else:
+            angle = np.degrees(np.arctan(dy / dx))
+            
+        # Mantieni il testo sempre leggibile (non sottosopra)
+        if angle > 90:
+            angle -= 180
+        elif angle < -90:
+            angle += 180
+            
+        return (mid_x, mid_y), angle
+
+    # Funzione per disegnare pesi direttamente sugli archi
+    def draw_edge_weights_on_edge(G, pos, edges_to_show, font_size=8, font_color='black', 
+                                 font_weight='normal', bbox_color='white'):
+        """Disegna i pesi degli edges direttamente sugli archi con rotazione"""
+        
+        for u, v in edges_to_show:
+            if G.has_edge(u, v):
+                # Calcola posizione e angolo
+                (label_x, label_y), angle = get_edge_label_pos_and_angle(pos, u, v)
+                
+                # Disegna il peso ruotato sull'arco
+                weight = G[u][v]['weight']
+                plt.text(label_x, label_y, f'{weight:.0f}',
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                        fontsize=font_size,
+                        color=font_color,
+                        weight=font_weight,
+                        rotation=angle,  # Ruota il testo parallelamente all'arco
+                        bbox=dict(boxstyle='round,pad=0.2', 
+                                facecolor=bbox_color, 
+                                edgecolor='none',
+                                alpha=0.9))
+
     # 1. Grafo originale
     plt.subplot(131)
     nx.draw_networkx_edges(G, pos, alpha=0.2, width=1)
-    nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=200)
+    nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=400)
     nx.draw_networkx_labels(G, pos, font_size=8)
+    
+    # Mostra solo alcuni pesi per non sovraffollare (edges più importanti)
+    if G.number_of_edges() <= 20:
+        # Se pochi edges, mostra tutti
+        draw_edge_weights_on_edge(G, pos, G.edges(), font_size=6, font_color='gray', bbox_color='lightblue')
+    else:
+        # Se molti edges, mostra solo quelli nell'MST vero per riferimento
+        draw_edge_weights_on_edge(G, pos, mst_true.edges(), font_size=6, font_color='gray', bbox_color='lightblue')
+    
     plt.title(f"Grafo Originale\n{G.number_of_nodes()} nodi, {G.number_of_edges()} edges")
     plt.axis('off')
 
     # 2. MST Kruskal (ottimale)
     plt.subplot(132)
     nx.draw_networkx_edges(G, pos, alpha=0.1, width=0.5)
-    nx.draw_networkx_edges(mst_true, pos, edge_color='green', width=3)
-    nx.draw_networkx_nodes(G, pos, node_color='lightgreen', node_size=200)
+    nx.draw_networkx_edges(mst_true, pos, edge_color='green', width=4)
+    nx.draw_networkx_nodes(G, pos, node_color='lightgreen', node_size=400)
     nx.draw_networkx_labels(G, pos, font_size=8)
 
+    # Pesi MST Kruskal con posizionamento ottimizzato
+    draw_edge_weights_on_edge(G, pos, mst_true.edges(), font_size=9, 
+                             font_color='darkgreen', font_weight='bold', bbox_color='lightgreen')
+
     # Box con peso totale
-    plt.text(0.5, -0.1, f"PESO TOTALE: {true_weight:.2f}",
+    plt.text(0.5, -0.15, f"PESO TOTALE: {true_weight:.0f}",
              transform=plt.gca().transAxes,
              horizontalalignment='center',
              bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgreen', alpha=0.8),
@@ -356,17 +428,30 @@ def visualize_with_weights(G, mst_pred, mst_true, save=True):
     plt.subplot(133)
     nx.draw_networkx_edges(G, pos, alpha=0.1, width=0.5)
     if mst_pred:
-        nx.draw_networkx_edges(mst_pred, pos, edge_color='red', width=3)
-        color = 'lightcoral'
-        gap_text = f"Gap: {((pred_weight/true_weight - 1) * 100):.1f}%"
+        # Colore diverso se non connesso
+        edge_color = 'red' if nx.is_connected(mst_pred) else 'orange'
+        nx.draw_networkx_edges(mst_pred, pos, edge_color=edge_color, width=4)
+        
+        # Pesi MST GNN con posizionamento ottimizzato
+        font_color = 'darkred' if nx.is_connected(mst_pred) else 'darkorange'
+        bbox_color = 'lightcoral' if nx.is_connected(mst_pred) else 'moccasin'
+        draw_edge_weights_on_edge(G, pos, mst_pred.edges(), font_size=9,
+                                 font_color=font_color, font_weight='bold', bbox_color=bbox_color)
+        
+        color = 'lightcoral' if nx.is_connected(mst_pred) else 'moccasin'
+        if nx.is_connected(mst_pred):
+            gap_text = f"Gap: {((pred_weight/true_weight - 1) * 100):.1f}%"
+        else:
+            gap_text = f"NON CONNESSO\n{nx.number_connected_components(mst_pred)} componenti"
     else:
         color = 'gray'
         gap_text = "FALLITO"
-    nx.draw_networkx_nodes(G, pos, node_color=color, node_size=200)
+        
+    nx.draw_networkx_nodes(G, pos, node_color=color, node_size=400)
     nx.draw_networkx_labels(G, pos, font_size=8)
 
     # Box con peso totale
-    plt.text(0.5, -0.1, f"PESO TOTALE: {pred_weight:.2f}\n{gap_text}",
+    plt.text(0.5, -0.15, f"PESO TOTALE: {pred_weight:.0f}\n{gap_text}",
              transform=plt.gca().transAxes,
              horizontalalignment='center',
              bbox=dict(boxstyle='round,pad=0.5', facecolor=color, alpha=0.8),
@@ -384,6 +469,373 @@ def visualize_with_weights(G, mst_pred, mst_true, save=True):
         print(f"\n✓ Confronto salvato in: {filename}")
 
     plt.show()
+
+
+def test_single_custom_random_graph(predictor):
+    """Testa su un singolo grafo casuale con pesi 1-100"""
+    
+    print("\n" + "="*60)
+    print("TEST SINGOLO GRAFO CASUALE")
+    print("="*60)
+    
+    # Parametri personalizzabili
+    try:
+        n_nodes = int(input("Numero di nodi (default 30): ") or "30")
+        n_nodes = max(5, min(200, n_nodes))  # Limiti ragionevoli
+    except:
+        n_nodes = 30
+    
+    # Scegli tipo di grafo
+    graph_types = [
+        'erdos_renyi', 'barabasi_albert', 'watts_strogatz',
+        'random_geometric', 'grid', 'complete', 'cycle', 'star'
+    ]
+    
+    print(f"\nTipi di grafo disponibili:")
+    for i, gtype in enumerate(graph_types, 1):
+        print(f"{i}. {gtype}")
+    
+    try:
+        choice = int(input(f"Scegli tipo (1-{len(graph_types)}, default 1): ") or "1")
+        graph_type = graph_types[choice - 1]
+    except:
+        graph_type = 'erdos_renyi'
+    
+    print(f"\nGenerando grafo {graph_type} con {n_nodes} nodi...")
+    
+    # Genera il grafo
+    try:
+        if graph_type == 'erdos_renyi':
+            p = random.uniform(0.1, 0.4)  # Densità ragionevole
+            G = nx.erdos_renyi_graph(n_nodes, p)
+            print(f"  Probabilità edges: {p:.3f}")
+            
+        elif graph_type == 'barabasi_albert':
+            m = max(1, min(5, n_nodes//5))
+            G = nx.barabasi_albert_graph(n_nodes, m)
+            print(f"  Edges per nuovo nodo: {m}")
+            
+        elif graph_type == 'watts_strogatz':
+            k = max(4, min(10, n_nodes//3))
+            k = k if k % 2 == 0 else k + 1  # k deve essere pari
+            p = random.uniform(0.1, 0.5)
+            G = nx.watts_strogatz_graph(n_nodes, k, p)
+            print(f"  k={k}, probabilità rewiring={p:.3f}")
+            
+        elif graph_type == 'random_geometric':
+            radius = random.uniform(0.2, 0.5)
+            G = nx.random_geometric_graph(n_nodes, radius)
+            print(f"  Raggio: {radius:.3f}")
+            
+        elif graph_type == 'grid':
+            rows = int(np.sqrt(n_nodes))
+            cols = int(np.ceil(n_nodes / rows))
+            G = nx.grid_2d_graph(rows, cols)
+            G = nx.convert_node_labels_to_integers(G)
+            print(f"  Griglia: {rows}x{cols}")
+            
+        elif graph_type == 'complete':
+            G = nx.complete_graph(n_nodes)
+            print(f"  Grafo completo")
+            
+        elif graph_type == 'cycle':
+            G = nx.cycle_graph(n_nodes)
+            print(f"  Grafo ciclico")
+            
+        elif graph_type == 'star':
+            G = nx.star_graph(n_nodes - 1)
+            print(f"  Grafo a stella")
+            
+        else:
+            G = nx.erdos_renyi_graph(n_nodes, 0.3)
+            
+    except Exception as e:
+        print(f"  Errore nella generazione: {e}")
+        print(f"  Fallback a erdos_renyi")
+        G = nx.erdos_renyi_graph(n_nodes, 0.3)
+    
+    # Assicura che sia connesso
+    if not nx.is_connected(G):
+        print("  Grafo non connesso, prendo la componente più grande...")
+        largest_cc = max(nx.connected_components(G), key=len)
+        G = G.subgraph(largest_cc).copy()
+        G = nx.convert_node_labels_to_integers(G)
+        print(f"  Ridotto a {G.number_of_nodes()} nodi")
+    
+    # PESI FISSI TRA 1 E 100 (come richiesto)
+    print("\n  Assegnando pesi casuali tra 1 e 100...")
+    for u, v in G.edges():
+        weight = random.randint(1, 100)  # Pesi interi tra 1 e 100
+        G[u][v]['weight'] = weight
+    
+    print(f"  Grafo finale: {G.number_of_nodes()} nodi, {G.number_of_edges()} edges")
+    
+    # Mostra statistiche sui pesi
+    weights = [G[u][v]['weight'] for u, v in G.edges()]
+    print(f"  Peso minimo: {min(weights)}")
+    print(f"  Peso massimo: {max(weights)}")
+    print(f"  Peso medio: {np.mean(weights):.1f}")
+    
+    print("\n" + "-"*50)
+    print("ESECUZIONE TEST...")
+    print("-"*50)
+    
+    # Test MST con GNN
+    print("\n1. PREDIZIONE GNN:")
+    start_time = time.time()
+    mst_pred, info = predictor.predict_mst(G)
+    gnn_time = time.time() - start_time
+    
+    if info['success'] and mst_pred:
+        gnn_weight = sum(G[u][v]['weight'] for u, v in mst_pred.edges())
+        
+        # VERIFICA CONNESSIONE
+        is_connected = nx.is_connected(mst_pred)
+        is_tree = nx.is_tree(mst_pred)
+        num_components = nx.number_connected_components(mst_pred)
+        
+        print(f"   ✓ MST predetto con successo")
+        print(f"   Peso totale: {gnn_weight}")
+        print(f"   Numero edges: {len(mst_pred.edges())}")
+        print(f"   È un albero valido: {is_tree}")
+        print(f"   È connesso: {is_connected}")
+        if not is_connected:
+            print(f"   ⚠️  Numero componenti: {num_components}")
+        print(f"   Tempo: {gnn_time*1000:.1f} ms")
+        
+        # Se non è connesso, aggiorna lo stato di successo
+        if not is_connected:
+            print(f"   ❌ ERRORE: L'albero predetto NON è connesso!")
+            info['success'] = False
+            info['connection_failure'] = True
+            
+    else:
+        print(f"   ✗ Predizione fallita")
+        gnn_weight = float('inf')
+        gnn_time = 0
+    
+    # Test MST con Kruskal (riferimento)
+    print("\n2. ALGORITMO KRUSKAL (OTTIMALE):")
+    start_time = time.time()
+    mst_true = nx.minimum_spanning_tree(G)
+    kruskal_time = time.time() - start_time
+    
+    kruskal_weight = sum(G[u][v]['weight'] for u, v in mst_true.edges())
+    print(f"   ✓ MST ottimale calcolato")
+    print(f"   Peso totale: {kruskal_weight}")
+    print(f"   Numero edges: {len(mst_true.edges())}")
+    print(f"   Tempo: {kruskal_time*1000:.1f} ms")
+    
+    # CONFRONTO DETTAGLIATO
+    print("\n" + "="*50)
+    print("📊 CONFRONTO RISULTATI")
+    print("="*50)
+    
+    if info['success'] and mst_pred and nx.is_connected(mst_pred):
+        # Calcola metriche
+        weight_diff = gnn_weight - kruskal_weight
+        quality_gap = weight_diff / kruskal_weight if kruskal_weight > 0 else 1.0
+        
+        # Conta edges corretti
+        pred_edges = set(mst_pred.edges())
+        true_edges = set(mst_true.edges())
+        # Considera anche edges al contrario (u,v) vs (v,u)
+        pred_edges_normalized = set()
+        for u, v in pred_edges:
+            pred_edges_normalized.add((min(u,v), max(u,v)))
+        true_edges_normalized = set()
+        for u, v in true_edges:
+            true_edges_normalized.add((min(u,v), max(u,v)))
+            
+        correct_edges = len(pred_edges_normalized & true_edges_normalized)
+        edge_accuracy = correct_edges / len(true_edges_normalized)
+        
+        speedup = kruskal_time / gnn_time if gnn_time > 0 else 0
+        
+        # Stampa risultati con colori emoji
+        if weight_diff < 0.001:  # Praticamente uguale
+            result_emoji = "🏆"
+            result_text = "PERFETTO!"
+        elif quality_gap < 0.05:  # Gap < 5%
+            result_emoji = "✅"
+            result_text = "OTTIMO"
+        elif quality_gap < 0.15:  # Gap < 15%
+            result_emoji = "👍"
+            result_text = "BUONO"
+        elif quality_gap < 0.30:  # Gap < 30%
+            result_emoji = "⚠️"
+            result_text = "DISCRETO"
+        else:
+            result_emoji = "❌"
+            result_text = "SCARSO"
+        
+        print(f"\n{result_emoji} RISULTATO: {result_text}")
+        print(f"\n📈 PESI DEGLI MST:")
+        print(f"   Kruskal (ottimale): {kruskal_weight}")
+        print(f"   GNN (predetto):     {gnn_weight}")
+        print(f"   Differenza:         {weight_diff:+.1f}")
+        print(f"   Gap di qualità:     {quality_gap*100:+.2f}%")
+        
+        print(f"\n🔗 VALIDITÀ STRUTTURALE:")
+        print(f"   È un albero:        {nx.is_tree(mst_pred)}")
+        print(f"   È connesso:         {nx.is_connected(mst_pred)}")
+        print(f"   Numero nodi:        {mst_pred.number_of_nodes()}/{G.number_of_nodes()}")
+        print(f"   Numero edges:       {mst_pred.number_of_edges()}/{G.number_of_nodes()-1}")
+        
+        print(f"\n📊 ACCURATEZZA EDGES:")
+        print(f"   Edges corretti:     {correct_edges}/{len(true_edges_normalized)}")
+        print(f"   Accuratezza:        {edge_accuracy*100:.1f}%")
+        
+        print(f"\n⚡ PRESTAZIONI:")
+        print(f"   Tempo GNN:          {gnn_time*1000:.1f} ms")
+        print(f"   Tempo Kruskal:      {kruskal_time*1000:.1f} ms")
+        print(f"   Speedup:            {speedup:.1f}x")
+        
+        # Analisi degli edges diversi
+        if correct_edges < len(true_edges_normalized):
+            wrong_edges = pred_edges_normalized - true_edges_normalized
+            missing_edges = true_edges_normalized - pred_edges_normalized
+            
+            print(f"\n🔍 ANALISI ERRORI:")
+            if wrong_edges:
+                print(f"   Edges errati predetti: {len(wrong_edges)}")
+                # Mostra peso degli edges errati
+                wrong_weights = [G[u][v]['weight'] for u, v in wrong_edges if G.has_edge(u, v)]
+                if wrong_weights:
+                    print(f"   Peso medio edges errati: {np.mean(wrong_weights):.1f}")
+            
+            if missing_edges:
+                print(f"   Edges mancanti: {len(missing_edges)}")
+                # Mostra peso degli edges mancanti
+                missing_weights = [G[u][v]['weight'] for u, v in missing_edges if G.has_edge(u, v)]
+                if missing_weights:
+                    print(f"   Peso medio edges mancanti: {np.mean(missing_weights):.1f}")
+    
+    elif info['success'] and mst_pred and not nx.is_connected(mst_pred):
+        # Caso speciale: MST predetto ma non connesso
+        print("\n❌ ERRORE CRITICO: MST NON CONNESSO")
+        print("   Il GNN ha predetto un insieme di edges che non forma un albero connesso")
+        
+        num_components = nx.number_connected_components(mst_pred)
+        components = list(nx.connected_components(mst_pred))
+        
+        print(f"\n🔍 DETTAGLI ERRORE:")
+        print(f"   Numero componenti:  {num_components}")
+        print(f"   Peso totale:        {gnn_weight}")
+        print(f"   Numero edges:       {mst_pred.number_of_edges()}")
+        print(f"   Numero nodi:        {mst_pred.number_of_nodes()}")
+        
+        print(f"\n📦 COMPONENTI CONNESSE:")
+        for i, component in enumerate(components, 1):
+            subgraph = mst_pred.subgraph(component)
+            comp_weight = sum(G[u][v]['weight'] for u, v in subgraph.edges() if G.has_edge(u, v))
+            print(f"   Componente {i}: {len(component)} nodi, {subgraph.number_of_edges()} edges, peso {comp_weight}")
+        
+        # Analizza quali edges servirebbero per connettere
+        print(f"\n🔧 PER CONNETTERE SERVIREBBERO:")
+        missing_edges_to_connect = num_components - 1
+        print(f"   Almeno {missing_edges_to_connect} edges aggiuntivi")
+        
+        # Trova gli edges più leggeri tra componenti diverse
+        inter_component_edges = []
+        for u, v in G.edges():
+            u_comp = None
+            v_comp = None
+            for i, comp in enumerate(components):
+                if u in comp:
+                    u_comp = i
+                if v in comp:
+                    v_comp = i
+            
+            if u_comp is not None and v_comp is not None and u_comp != v_comp:
+                inter_component_edges.append((u, v, G[u][v]['weight']))
+        
+        if inter_component_edges:
+            inter_component_edges.sort(key=lambda x: x[2])  # Ordina per peso
+            print(f"   Edge più leggero tra componenti: {inter_component_edges[0][0]}-{inter_component_edges[0][1]} (peso {inter_component_edges[0][2]})")
+        
+        quality_gap = 1.0  # Gap massimo per errore di connessione
+        edge_accuracy = 0.0
+        speedup = 0
+    
+    else:
+        print("\n❌ PREDIZIONE GNN FALLITA")
+        if hasattr(info, 'connection_failure') and info['connection_failure']:
+            print("   Motivo: L'albero predetto non è connesso")
+        else:
+            print("   Non è stato possibile costruire un MST valido")
+        quality_gap = 1.0
+        edge_accuracy = 0.0
+        speedup = 0
+    
+    # Opzione visualizzazione
+    print(f"\n" + "="*50)
+    visualize = input("🎨 Vuoi visualizzare il confronto grafico? (s/n): ").lower()
+    if visualize == 's':
+        print("Generando visualizzazione...")
+        visualize_with_weights(G, mst_pred, mst_true, save=True)
+    
+    # Salva dettagli se richiesto
+    save_details = input("💾 Vuoi salvare i dettagli del test? (s/n): ").lower()
+    if save_details == 's':
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"single_test_details_{timestamp}.txt"
+        
+        with open(filename, 'w') as f:
+            f.write(f"TEST SINGOLO GRAFO CASUALE\n")
+            f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"PARAMETRI GRAFO:\n")
+            f.write(f"  Tipo: {graph_type}\n")
+            f.write(f"  Nodi: {G.number_of_nodes()}\n")
+            f.write(f"  Edges: {G.number_of_edges()}\n")
+            f.write(f"  Densità: {nx.density(G):.3f}\n")
+            f.write(f"  Peso minimo: {min(weights)}\n")
+            f.write(f"  Peso massimo: {max(weights)}\n")
+            f.write(f"  Peso medio: {np.mean(weights):.1f}\n\n")
+            
+            f.write(f"RISULTATI:\n")
+            f.write(f"  Peso Kruskal: {kruskal_weight}\n")
+            f.write(f"  Peso GNN: {gnn_weight}\n")
+            f.write(f"  Gap: {quality_gap*100:.2f}%\n")
+            f.write(f"  Accuratezza edges: {edge_accuracy*100:.1f}%\n")
+            f.write(f"  Speedup: {speedup:.1f}x\n")
+            f.write(f"  È connesso: {nx.is_connected(mst_pred) if mst_pred else False}\n")
+            f.write(f"  È albero valido: {nx.is_tree(mst_pred) if mst_pred else False}\n")
+            if mst_pred and not nx.is_connected(mst_pred):
+                f.write(f"  Numero componenti: {nx.number_connected_components(mst_pred)}\n")
+            f.write(f"\n")
+            
+            if info['success'] and mst_pred and nx.is_connected(mst_pred):
+                f.write(f"EDGES MST KRUSKAL:\n")
+                for u, v in sorted(mst_true.edges()):
+                    f.write(f"  {u}-{v}: peso {G[u][v]['weight']}\n")
+                
+                f.write(f"\nEDGES MST GNN:\n")
+                for u, v in sorted(mst_pred.edges()):
+                    f.write(f"  {u}-{v}: peso {G[u][v]['weight']}\n")
+            elif mst_pred and not nx.is_connected(mst_pred):
+                f.write(f"EDGES MST GNN (NON CONNESSO):\n")
+                for u, v in sorted(mst_pred.edges()):
+                    f.write(f"  {u}-{v}: peso {G[u][v]['weight']}\n")
+                
+                f.write(f"\nCOMPONENTI CONNESSE:\n")
+                components = list(nx.connected_components(mst_pred))
+                for i, comp in enumerate(components, 1):
+                    f.write(f"  Componente {i}: nodi {sorted(comp)}\n")
+        
+        print(f"✓ Dettagli salvati in: {filename}")
+    
+    return {
+        'graph_type': graph_type,
+        'n_nodes': G.number_of_nodes(),
+        'n_edges': G.number_of_edges(),
+        'success': info['success'],
+        'kruskal_weight': kruskal_weight,
+        'gnn_weight': gnn_weight,
+        'quality_gap': quality_gap,
+        'edge_accuracy': edge_accuracy,
+        'speedup': speedup
+    }
 
 
 def continuous_random_test(predictor, num_tests=100, show_plots=False):
@@ -676,16 +1128,17 @@ def main():
         print(f"✗ Errore: {e}")
         return
 
-    # Menu
+    # Menu aggiornato
     while True:
         print("\nOpzioni:")
         print("1. Test rapido (10 grafi casuali)")
-        print("2. Test esteso (100 grafi casuali)")
+        print("2. Test esteso (100 grafi casuali)") 
         print("3. Test personalizzato (scegli numero)")
         print("4. Test infinito (premi Ctrl+C per fermare)")
         print("5. Test con parametri custom")
         print("6. Test su tipo specifico")
-        print("7. Esci")
+        print("7. Test SINGOLO grafo casuale (pesi 1-100)")  # NUOVA OPZIONE
+        print("8. Esci")
 
         choice = input("\nScelta: ")
 
@@ -814,6 +1267,10 @@ def main():
                     print(f"Accuratezza media: {np.mean([r['edge_accuracy'] for r in successful])*100:.2f}%")
 
         elif choice == '7':
+            # NUOVA OPZIONE: Test singolo grafo casuale
+            result = test_single_custom_random_graph(predictor)
+            
+        elif choice == '8':
             break
         else:
             print("Scelta non valida")

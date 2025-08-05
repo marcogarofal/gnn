@@ -1,0 +1,23 @@
+{
+  "total_graphs": 200,
+  "total_trees": 2117,
+  "avg_trees_per_graph": 10.585,
+  "node_stats": {
+    "min": 9,
+    "max": 49,
+    "mean": 29.295
+  },
+  "edge_stats": {
+    "min": 12,
+    "max": 195,
+    "mean": 73.73
+  },
+  "graph_types": {
+    "random_geometric": 32,
+    "erdos_renyi": 50,
+    "watts_strogatz": 41,
+    "grid": 36,
+    "barabasi_albert": 41
+  },
+  "optimal_trees_ratio": 0.0944733112895607
+}
